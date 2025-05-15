@@ -4,7 +4,12 @@ import re
 st.set_page_config(layout="wide")
 st.title("読み替え補助ツール")
 
-# カスタムCSS（余白詰め）
+# セッション変数の初期化
+for key in ["source", "instruction"]:
+    if key not in st.session_state:
+        st.session_state[key] = ""
+
+# カスタムCSS
 st.markdown("""
     <style>
     .custom-label {
@@ -22,6 +27,10 @@ st.markdown("""
         padding-top: 0px !important;
         margin-top: 0px !important;
     }
+    .select-on-click {
+        user-select: all;
+        cursor: pointer;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -30,37 +39,46 @@ left_col, center_col, right_col = st.columns([2, 0.4, 2])
 
 with left_col:
     st.markdown('<div class="custom-label">読み替え対象</div>', unsafe_allow_html=True)
-    source_text = st.text_area(label="", key="source", height=200)
+    source_text = st.text_area(
+        label="読み替え対象",
+        value=st.session_state["source"],
+        key="source_textarea",
+        label_visibility="collapsed",
+        height=200
+    )
 
-    # 空行（マージン調整）
     st.markdown('<div style="margin-top: 1rem;"></div>', unsafe_allow_html=True)
 
     st.markdown('<div class="custom-label">読み替え指示</div>', unsafe_allow_html=True)
-    rewrite_instructions = st.text_area(label="", key="instruction", height=200)
+    rewrite_instructions = st.text_area(
+        label="読み替え指示",
+        value=st.session_state["instruction"],
+        key="instruction_textarea",
+        label_visibility="collapsed",
+        height=200
+    )
 
 with center_col:
     st.write("")
     run_button = st.button("▶ 読み替えを実行")
     show_comparison = st.toggle("原文と比較")
-    # ✅ 入力クリアボタン（読み替え対象・指示を空にする）
-    if st.button(" 入力をクリア"):
+
+    # ✅ 入力クリア：セッション変数を空にしてリロード
+    if st.button("🗑 入力をクリア"):
         st.session_state["source"] = ""
         st.session_state["instruction"] = ""
-        st.experimental_rerun()
+        st.rerun()
 
 def apply_replacements_safe(text, instructions, show_diff=False):
-    # 1. 指示文をパース（ネストに対応）
-    pattern = r'「(.*?)」とあるのは「((?:[^「」]|「[^」]*」)*?)」と'
+    pattern = r'「(.*?)」とあるのは、?「((?:[^「」]|「[^」]*」)*?)」と'
     matches = re.findall(pattern, instructions)
 
-    # 2. 一時置換トークン生成
     tmp_map = {}
     for i, (original, replacement) in enumerate(matches):
         token = f"__TMP{i}__"
         text = re.sub(re.escape(original), token, text)
         tmp_map[token] = (original, replacement)
 
-    # 3. トークンを最終形に置き換え
     for token, (original, replacement) in tmp_map.items():
         if show_diff:
             styled = f"<strong style='color:#800000'>＜{original}／{replacement}＞</strong>"
@@ -74,4 +92,8 @@ with right_col:
     if run_button and source_text and rewrite_instructions:
         result = apply_replacements_safe(source_text, rewrite_instructions, show_diff=show_comparison)
         st.markdown("#### 読み替え結果")
-        st.markdown(f"<div style='white-space: pre-wrap; font-size: 16px'>{result}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='select-on-click' style='white-space: pre-wrap; font-size: 16px'>{result}</div>", unsafe_allow_html=True)
+
+# ✅ 必ずセッションに保存（後で読み込むため）
+st.session_state["source"] = source_text
+st.session_state["instruction"] = rewrite_instructions
